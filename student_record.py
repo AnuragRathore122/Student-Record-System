@@ -1,20 +1,61 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+import streamlit as st
 import sqlite3
+import pandas as pd
+
+
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="Student Record System",
+    page_icon="🎓",
+    layout="wide"
+)
+
+
+# ---------------- CUSTOM CSS ----------------
+st.markdown("""
+<style>
+
+.main {
+    background-color: #f5f7fb;
+}
+
+.main-title {
+    text-align: center;
+    font-size: 40px;
+    font-weight: bold;
+    margin-bottom: 0;
+}
+
+.subtitle {
+    text-align: center;
+    color: #666;
+    font-size: 18px;
+    margin-bottom: 30px;
+}
+
+.stButton > button {
+    width: 100%;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 10px;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 
 # ---------------- DATABASE ----------------
-
-conn = sqlite3.connect("students.db")
+conn = sqlite3.connect("students.db", check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    age INTEGER,
-    course TEXT,
-    email TEXT
+    age INTEGER NOT NULL,
+    course TEXT NOT NULL,
+    email TEXT NOT NULL
 )
 """)
 
@@ -23,312 +64,333 @@ conn.commit()
 
 # ---------------- FUNCTIONS ----------------
 
-def clear_fields():
-    entry_name.delete(0, tk.END)
-    entry_age.delete(0, tk.END)
-    entry_course.delete(0, tk.END)
-    entry_email.delete(0, tk.END)
+def get_students():
+    return pd.read_sql_query(
+        "SELECT * FROM students ORDER BY id DESC",
+        conn
+    )
 
 
-def show_students():
-    for item in student_table.get_children():
-        student_table.delete(item)
-
-    cursor.execute("SELECT * FROM students")
-    rows = cursor.fetchall()
-
-    for row in rows:
-        student_table.insert("", tk.END, values=row)
-
-
-def add_student():
-    name = entry_name.get()
-    age = entry_age.get()
-    course = entry_course.get()
-    email = entry_email.get()
-
-    if name == "" or age == "" or course == "" or email == "":
-        messagebox.showwarning("Warning", "Please fill all fields!")
-        return
-
-    try:
-        age = int(age)
-    except ValueError:
-        messagebox.showerror("Error", "Age must be a number!")
-        return
+def add_student(name, age, course, email):
 
     cursor.execute(
-        "INSERT INTO students (name, age, course, email) VALUES (?, ?, ?, ?)",
+        """
+        INSERT INTO students (name, age, course, email)
+        VALUES (?, ?, ?, ?)
+        """,
         (name, age, course, email)
     )
 
     conn.commit()
 
-    messagebox.showinfo("Success", "Student added successfully!")
 
-    clear_fields()
-    show_students()
+def update_student(student_id, name, age, course, email):
 
-
-def select_student(event):
-    selected = student_table.focus()
-
-    if not selected:
-        return
-
-    values = student_table.item(selected, "values")
-
-    if values:
-        clear_fields()
-
-        entry_name.insert(0, values[1])
-        entry_age.insert(0, values[2])
-        entry_course.insert(0, values[3])
-        entry_email.insert(0, values[4])
-
-
-def update_student():
-    selected = student_table.focus()
-
-    if not selected:
-        messagebox.showwarning("Warning", "Please select a student!")
-        return
-
-    values = student_table.item(selected, "values")
-    student_id = values[0]
-
-    name = entry_name.get()
-    age = entry_age.get()
-    course = entry_course.get()
-    email = entry_email.get()
-
-    if name == "" or age == "" or course == "" or email == "":
-        messagebox.showwarning("Warning", "Please fill all fields!")
-        return
-
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE students
-        SET name=?, age=?, course=?, email=?
-        WHERE id=?
-    """, (name, age, course, email, student_id))
+        SET name = ?, age = ?, course = ?, email = ?
+        WHERE id = ?
+        """,
+        (name, age, course, email, student_id)
+    )
 
     conn.commit()
 
-    messagebox.showinfo("Success", "Student updated successfully!")
 
-    clear_fields()
-    show_students()
+def delete_student(student_id):
 
-
-def delete_student():
-    selected = student_table.focus()
-
-    if not selected:
-        messagebox.showwarning("Warning", "Please select a student!")
-        return
-
-    values = student_table.item(selected, "values")
-    student_id = values[0]
-
-    answer = messagebox.askyesno(
-        "Confirm Delete",
-        "Do you want to delete this student?"
+    cursor.execute(
+        "DELETE FROM students WHERE id = ?",
+        (student_id,)
     )
 
-    if answer:
-        cursor.execute(
-            "DELETE FROM students WHERE id=?",
-            (student_id,)
-        )
-
-        conn.commit()
-
-        messagebox.showinfo("Success", "Student deleted successfully!")
-
-        clear_fields()
-        show_students()
-
-
-def search_student():
-    search_text = entry_search.get()
-
-    for item in student_table.get_children():
-        student_table.delete(item)
-
-    cursor.execute("""
-        SELECT * FROM students
-        WHERE name LIKE ? OR course LIKE ?
-    """, (
-        "%" + search_text + "%",
-        "%" + search_text + "%"
-    ))
-
-    rows = cursor.fetchall()
-
-    for row in rows:
-        student_table.insert("", tk.END, values=row)
-
-
-# ---------------- GUI WINDOW ----------------
-
-root = tk.Tk()
-root.title("Student Record Management System")
-root.geometry("850x600")
-root.resizable(False, False)
+    conn.commit()
 
 
 # ---------------- TITLE ----------------
 
-title = tk.Label(
-    root,
-    text="STUDENT RECORD MANAGEMENT SYSTEM",
-    font=("Arial", 20, "bold")
+st.markdown(
+    '<p class="main-title">🎓 Student Record System</p>',
+    unsafe_allow_html=True
 )
 
-title.pack(pady=15)
-
-
-# ---------------- INPUT FRAME ----------------
-
-input_frame = tk.Frame(root)
-input_frame.pack(pady=10)
-
-
-tk.Label(input_frame, text="Name:", font=("Arial", 11)).grid(
-    row=0, column=0, padx=10, pady=8
-)
-
-entry_name = tk.Entry(input_frame, width=25)
-entry_name.grid(row=0, column=1)
-
-
-tk.Label(input_frame, text="Age:", font=("Arial", 11)).grid(
-    row=0, column=2, padx=10, pady=8
-)
-
-entry_age = tk.Entry(input_frame, width=15)
-entry_age.grid(row=0, column=3)
-
-
-tk.Label(input_frame, text="Course:", font=("Arial", 11)).grid(
-    row=1, column=0, padx=10, pady=8
-)
-
-entry_course = tk.Entry(input_frame, width=25)
-entry_course.grid(row=1, column=1)
-
-
-tk.Label(input_frame, text="Email:", font=("Arial", 11)).grid(
-    row=1, column=2, padx=10, pady=8
-)
-
-entry_email = tk.Entry(input_frame, width=25)
-entry_email.grid(row=1, column=3)
-
-
-# ---------------- BUTTONS ----------------
-
-button_frame = tk.Frame(root)
-button_frame.pack(pady=10)
-
-
-tk.Button(
-    button_frame,
-    text="Add Student",
-    width=15,
-    command=add_student
-).grid(row=0, column=0, padx=5)
-
-
-tk.Button(
-    button_frame,
-    text="Update Student",
-    width=15,
-    command=update_student
-).grid(row=0, column=1, padx=5)
-
-
-tk.Button(
-    button_frame,
-    text="Delete Student",
-    width=15,
-    command=delete_student
-).grid(row=0, column=2, padx=5)
-
-
-tk.Button(
-    button_frame,
-    text="Clear",
-    width=15,
-    command=clear_fields
-).grid(row=0, column=3, padx=5)
-
-
-# ---------------- SEARCH ----------------
-
-search_frame = tk.Frame(root)
-search_frame.pack(pady=10)
-
-
-tk.Label(
-    search_frame,
-    text="Search:",
-    font=("Arial", 11)
-).pack(side=tk.LEFT)
-
-
-entry_search = tk.Entry(search_frame, width=30)
-entry_search.pack(side=tk.LEFT, padx=10)
-
-
-tk.Button(
-    search_frame,
-    text="Search",
-    command=search_student
-).pack(side=tk.LEFT)
-
-
-tk.Button(
-    search_frame,
-    text="Show All",
-    command=show_students
-).pack(side=tk.LEFT, padx=5)
-
-
-# ---------------- TABLE ----------------
-
-table_frame = tk.Frame(root)
-table_frame.pack(pady=10)
-
-
-columns = ("ID", "Name", "Age", "Course", "Email")
-
-student_table = ttk.Treeview(
-    table_frame,
-    columns=columns,
-    show="headings",
-    height=12
+st.markdown(
+    '<p class="subtitle">Manage student records easily and efficiently</p>',
+    unsafe_allow_html=True
 )
 
 
-for column in columns:
-    student_table.heading(column, text=column)
-    student_table.column(column, width=140)
+# ---------------- SIDEBAR ----------------
 
+st.sidebar.title("🎓 Navigation")
 
-student_table.pack()
-
-
-student_table.bind(
-    "<<TreeviewSelect>>",
-    select_student
+menu = st.sidebar.radio(
+    "Select an option",
+    [
+        "📊 Dashboard",
+        "➕ Add Student",
+        "✏️ Update Student",
+        "🗑️ Delete Student"
+    ]
 )
 
 
-# ---------------- START ----------------
+# ================= DASHBOARD =================
 
-show_students()
+if menu == "📊 Dashboard":
 
-root.mainloop()
+    students = get_students()
 
-conn.close()
+    # Statistics
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "👨‍🎓 Total Students",
+            len(students)
+        )
+
+    with col2:
+        if len(students) > 0:
+            st.metric(
+                "📚 Total Courses",
+                students["course"].nunique()
+            )
+        else:
+            st.metric("📚 Total Courses", 0)
+
+    with col3:
+        if len(students) > 0:
+            st.metric(
+                "🎂 Average Age",
+                round(students["age"].mean(), 1)
+            )
+        else:
+            st.metric("🎂 Average Age", 0)
+
+    st.divider()
+
+    st.subheader("📋 Student Records")
+
+    # Search
+    search = st.text_input(
+        "🔍 Search by Name or Course"
+    )
+
+    if len(students) > 0:
+
+        if search:
+            students = students[
+                students["name"].str.contains(
+                    search,
+                    case=False,
+                    na=False
+                )
+                |
+                students["course"].str.contains(
+                    search,
+                    case=False,
+                    na=False
+                )
+            ]
+
+        st.dataframe(
+            students,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("No student records found. Add your first student! 🎓")
+
+
+# ================= ADD STUDENT =================
+
+elif menu == "➕ Add Student":
+
+    st.header("➕ Add New Student")
+
+    with st.form("add_student_form"):
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            name = st.text_input("👤 Student Name")
+            age = st.number_input(
+                "🎂 Age",
+                min_value=1,
+                max_value=100,
+                value=18
+            )
+
+        with col2:
+            course = st.text_input("📚 Course")
+            email = st.text_input("📧 Email")
+
+        submitted = st.form_submit_button(
+            "➕ Add Student",
+            use_container_width=True
+        )
+
+        if submitted:
+
+            if name and course and email:
+
+                add_student(
+                    name,
+                    age,
+                    course,
+                    email
+                )
+
+                st.success(
+                    f"🎉 {name} has been added successfully!"
+                )
+
+            else:
+                st.error(
+                    "⚠️ Please fill in all fields!"
+                )
+
+
+# ================= UPDATE STUDENT =================
+
+elif menu == "✏️ Update Student":
+
+    st.header("✏️ Update Student Record")
+
+    students = get_students()
+
+    if len(students) > 0:
+
+        student_id = st.selectbox(
+            "Select Student ID",
+            students["id"].tolist()
+        )
+
+        selected_student = students[
+            students["id"] == student_id
+        ].iloc[0]
+
+        with st.form("update_student_form"):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                name = st.text_input(
+                    "👤 Student Name",
+                    value=selected_student["name"]
+                )
+
+                age = st.number_input(
+                    "🎂 Age",
+                    min_value=1,
+                    max_value=100,
+                    value=int(selected_student["age"])
+                )
+
+            with col2:
+                course = st.text_input(
+                    "📚 Course",
+                    value=selected_student["course"]
+                )
+
+                email = st.text_input(
+                    "📧 Email",
+                    value=selected_student["email"]
+                )
+
+            submitted = st.form_submit_button(
+                "💾 Update Student",
+                use_container_width=True
+            )
+
+            if submitted:
+
+                update_student(
+                    student_id,
+                    name,
+                    age,
+                    course,
+                    email
+                )
+
+                st.success(
+                    "✅ Student record updated successfully!"
+                )
+
+                st.rerun()
+
+    else:
+        st.warning(
+            "⚠️ No students available to update."
+        )
+
+
+# ================= DELETE STUDENT =================
+
+elif menu == "🗑️ Delete Student":
+
+    st.header("🗑️ Delete Student")
+
+    students = get_students()
+
+    if len(students) > 0:
+
+        student_id = st.selectbox(
+            "Select Student to Delete",
+            students["id"].tolist()
+        )
+
+        selected_student = students[
+            students["id"] == student_id
+        ].iloc[0]
+
+        st.warning(
+            f"""
+            You are about to delete:
+
+            **Name:** {selected_student['name']}
+
+            **Course:** {selected_student['course']}
+            """
+        )
+
+        confirm = st.checkbox(
+            "I confirm that I want to delete this student"
+        )
+
+        if st.button(
+            "🗑️ Delete Student",
+            use_container_width=True
+        ):
+
+            if confirm:
+
+                delete_student(student_id)
+
+                st.success(
+                    "🗑️ Student deleted successfully!"
+                )
+
+                st.rerun()
+
+            else:
+                st.error(
+                    "⚠️ Please confirm before deleting!"
+                )
+
+    else:
+        st.info(
+            "No students available to delete."
+        )
+
+
+# ---------------- FOOTER ----------------
+
+st.divider()
+
+st.caption(
+    "🎓 Student Record Management System | Built with Python, Streamlit & SQLite"
+)
